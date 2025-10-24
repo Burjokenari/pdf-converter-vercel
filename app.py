@@ -14,76 +14,92 @@ from PIL import Image
 load_dotenv()
 app = Flask(__name__)
 
-# Konfigurasi Folder
+# Konfigurasi Folder Upload
 UPLOAD_FOLDER = '/tmp' if os.environ.get('VERCEL') else 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Konfigurasi API Gemini
+# --- Konfigurasi Gemini ---
+GEMINI_MODEL = None
 try:
-    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-    GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash-latest')
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY tidak ditemukan di environment variable!")
+
+    genai.configure(api_key=api_key)
+    GEMINI_MODEL = genai.GenerativeModel("gemini-2.5-pro")
+    print("✅ Gemini berhasil dikonfigurasi.")
 except Exception as e:
-    print(f"Error Konfigurasi Gemini: {e}")
-    GEMINI_MODEL = None
+    print(f"❌ Error Konfigurasi Gemini: {e}")
 
-# --- Prompt Paten untuk Asisten AI ---
-CONVERSION_PROMPT = """Anda adalah asisten AI untuk web content administrator yang bertugas mengonversi file .pdf atau gambar menjadi *pure HTML snippet* (tanpa DOCTYPE, <html>, <head>, atau <body>). Output hanya boleh berisi struktur HTML inti seperti <h1>, <h2>, <p>, <ul>, <ol>, <li>, <table>, dan <a>. Jangan sertakan teks tambahan, penjelasan, atau pembuka seperti 'Berikut hasil konversi'. Hanya berikan konten HTML murni.
 
-Instruksi konversi:
-1. Gunakan <h1> untuk judul utama, <h2> untuk subjudul, <h3> untuk sub-subjudul.
-2. Gunakan <table> standar dengan border="1" tanpa CSS.
-3. Gunakan <p> untuk paragraf, <strong> untuk bold.
-4. Untuk list, gunakan <ul><li> atau <ol><li> sesuai konteks.
-5. Jangan tulis <html> atau <body>, cukup isi konten HTML-nya saja.
+# --- Prompt Utama ---
+CONVERSION_PROMPT = """
+Anda adalah asisten AI yang ahli dalam memahami dokumen visual (seperti PDF atau gambar berisi teks) 
+dan mengonversinya menjadi HTML murni dengan struktur yang rapi dan semantik.
 
-Instruksi konversi khusus untuk SOP:
-1. Judul SOP menggunakan <h2>.
-2. Subjudul seperti 'Standard Operating Procedure' menggunakan <h3>.
-3. Jika terdapat tabel, gunakan <table> dengan border="1", tanpa style CSS. Isi tabel jika kosong dengan strip (-).
-4. List yang ditemukan dalam tabel harus menggunakan <ol> untuk urutan numerik dan <ul> untuk bullet list, walaupun hanya memiliki satu item.
-5. Untuk FAQ, setiap pertanyaan setelah <h2> harus diikuti <br> (bukan <p>). Berikan penegasan seperti "Berikut ini adalah (copy judulnya)" setelah setiap pertanyaan.
-6. Setiap kali ada teks tebal, gunakan <strong></strong>, namun jika terdapat teks italic, jangan menggunakan tag apapun.
-7. Ketika terdapat aritmatika (misalnya 10+5/2), tulis dalam format teks (misalnya sepuluh ditambah lima dibagi dua).
-8. Jangan mengubah urutan elemen atau isi teks dari dokumen asli kecuali untuk memperbaiki kesalahan penulisan."""
+Tugas Anda:
+- Ambil konten teks yang terbaca di gambar/dokumen.
+- Pertahankan struktur dokumen (judul, paragraf, tabel, daftar, dsb).
+- Gunakan elemen HTML seperti <h1>-<h6>, <p>, <table>, <ul>/<ol>, dan <strong>/<em>.
+- Jangan sertakan elemen <html>, <head>, <body>, atau <style>.
+- Keluaran harus dalam format HTML murni yang bisa langsung disisipkan di halaman web.
+"""
 
+# --- Kelas Konversi ---
 class ConversionAssistant:
     def _call_gemini_vision(self, image: Image.Image):
-        """Fungsi inti untuk memanggil API Gemini menggunakan pola GenerativeModel."""
+        """Panggil API Gemini dengan gambar dan instruksi konversi."""
         if not GEMINI_MODEL:
-            return "<strong>Error:</strong> API Key Gemini tidak terkonfigurasi."
-        
+            return "<strong>Error:</strong> Gemini belum dikonfigurasi dengan benar."
+
         try:
-            # --- PERUBAHAN UTAMA: Kembali ke pola GenerativeModel yang benar ---
-            response = GEMINI_MODEL.generate_content([CONVERSION_PROMPT, image])
-            # ------------------------------------------------------------------
-            
-            clean_response = re.sub(r'```html\n|```', '', response.text)
-            return clean_response
+            response = GEMINI_MODEL.generate_content(
+                contents=[CONVERSION_PROMPT, image],
+                generation_config={
+                    "temperature": 0.4,
+                    "max_output_tokens": 4096,
+                },
+                safety_settings=[
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                ]
+            )
+
+            result_text = getattr(response, "text", None) or ""
+            clean_html = re.sub(r'```html\n|```', '', result_text).strip()
+            return clean_html or "<p><strong>Error:</strong> Tidak ada output dari Gemini.</p>"
+
         except Exception as e:
-            return f"<strong>Error saat menghubungi Gemini API:</strong> {e}"
+            print("❌ Error Gemini:", traceback.format_exc())
+            return f"<p><strong>Error saat menghubungi Gemini API:</strong> {e}</p>"
 
     def to_pure_html(self, file_path_str: str):
+        """Deteksi tipe file (PDF/gambar) lalu konversi ke HTML."""
         file_path = Path(file_path_str)
-        
-        if file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.bmp']:
+        suffix = file_path.suffix.lower()
+
+        if suffix in ['.png', '.jpg', '.jpeg', '.bmp']:
             img = Image.open(file_path)
             return self._call_gemini_vision(img)
 
-        elif file_path.suffix.lower() == '.pdf':
+        elif suffix == '.pdf':
             doc = fitz.open(file_path)
             full_html = ""
             for i, page in enumerate(doc):
-                pix = page.get_pixmap(dpi=96)
+                pix = page.get_pixmap(dpi=120)
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 html_snippet = self._call_gemini_vision(img)
-                full_html += f"\n{html_snippet}\n\n"
+                full_html += f"\n<!-- Halaman {i+1} -->\n{html_snippet}\n\n"
             doc.close()
             return full_html.strip()
-            
+
         return "<p><strong>Error:</strong> Format file tidak didukung.</p>"
 
 assistant = ConversionAssistant()
 
+# --- ROUTE Flask ---
 @app.route('/', methods=['GET', 'POST'])
 def index():
     context = {}
@@ -93,12 +109,11 @@ def index():
             context['error'] = "Silakan pilih file terlebih dahulu."
             return render_template('index.html', **context)
 
-        filename = str(uuid.uuid4()) + Path(file.filename).suffix.lower()
+        filename = f"{uuid.uuid4()}{Path(file.filename).suffix.lower()}"
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
-        
+
         html_snippet = assistant.to_pure_html(filepath)
-        
         context['html_snippet'] = html_snippet
         if filename.endswith('.pdf'):
             context['pdf_filename'] = filename
@@ -108,6 +123,7 @@ def index():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

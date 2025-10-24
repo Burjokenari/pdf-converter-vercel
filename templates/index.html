@@ -1,120 +1,243 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Conversion Assistant</title>
-    <style>
-        /* (CSS dari versi minimalis sebelumnya tetap sama) */
-        :root {
-            --color-bg: #FFFFFF; --color-panel-bg: #F8F9FA; --color-primary-blue: #007BFF;
-            --color-accent-green: #28A745; --color-highlight-yellow: #FFC107;
-            --color-text-dark: #343A40; --color-text-light: #6c757d; --color-border: #E9ECEF;
-            --font-sans-serif: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-        }
-        body { font-family: var(--font-sans-serif); margin: 0; background-color: var(--color-panel-bg); color: var(--color-text-dark); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        * { box-sizing: border-box; }
-        .header { background-color: var(--color-bg); padding: 1rem 2rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        .header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
-        .main-container { display: flex; flex-grow: 1; }
-        .panel { flex: 1; display: flex; flex-direction: column; background-color: var(--color-bg); }
-        .panel:first-child { border-right: 1px solid var(--color-border); }
-        .panel-header { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        .panel-title { font-weight: 600; font-size: 0.9rem; }
-        .panel-content { flex-grow: 1; overflow: auto; }
-        .upload-area { padding: 1rem 1.5rem; }
-        .form-controls { display: flex; gap: 1rem; align-items: center; }
-        input[type="file"] { flex-grow: 1; }
-        .action-button { padding: 0.6rem 1.2rem; background-color: var(--color-primary-blue); color: white; border: none; cursor: pointer; border-radius: 6px; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s; }
-        .action-button:hover { background-color: #0056b3; }
-        .gemini-button { padding: 0.5rem 1rem; background-color: var(--color-accent-green); color: white; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: background-color 0.2s; }
-        .gemini-button:hover { background-color: #1e7e34; }
-        .placeholder { display: flex; justify-content: center; align-items: center; height: 100%; color: var(--color-text-light); text-align: center; }
-        iframe { width: 100%; height: 100%; border: none; }
-        textarea#html-output { width: 100%; height: 100%; border: none; resize: none; padding: 1rem; font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.5; background-color: #2E3440; color: #D8DEE9; outline: none; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Conversion Assistant</title>
+  <style>
+    :root {
+      --bg: #f5f6fa;
+      --bg-panel: #ffffff;
+      --border: #e1e4e8;
+      --text: #2d3436;
+      --text-light: #6c757d;
+      --primary: #007bff;
+      --success: #28a745;
+      --warning: #ffc107;
+      --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    }
 
-        /* --- CSS BARU UNTUK LOADING OVERLAY --- */
-        #loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.8);
-            display: none; /* Sembunyi secara default */
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            flex-direction: column;
-            gap: 1rem;
-        }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1);
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border-left-color: var(--color-primary-blue);
-            animation: spin 1s ease infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background-color: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .gemini-button {
+      background-color: var(--success);
+      color: #fff;
+      text-decoration: none;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: 0.2s;
+    }
+
+    .gemini-button:hover {
+      background-color: #218838;
+    }
+
+    /* Main container */
+    main {
+      display: flex;
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    section.panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-panel);
+    }
+
+    section.panel:first-child {
+      border-right: 1px solid var(--border);
+    }
+
+    .panel-header {
+      padding: 0.8rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 0.9rem;
+      background-color: #fafbfc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .panel-content {
+      flex-grow: 1;
+      overflow: auto;
+    }
+
+    .upload-area {
+      padding: 1rem 1.5rem;
+    }
+
+    .form-controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    input[type="file"] {
+      flex-grow: 1;
+      font-size: 0.9rem;
+    }
+
+    .action-button {
+      background-color: var(--primary);
+      color: #fff;
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+
+    .action-button:hover {
+      background-color: #0056b3;
+    }
+
+    .placeholder {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-light);
+      text-align: center;
+      padding: 2rem;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    textarea#html-output {
+      width: 100%;
+      height: 100%;
+      border: none;
+      resize: none;
+      padding: 1rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      background-color: #1e1e1e;
+      color: #dcdcdc;
+      outline: none;
+    }
+
+    /* Loading overlay */
+    #loading-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.9);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      gap: 1rem;
+      z-index: 999;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      border-left-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsiveness */
+    @media (max-width: 768px) {
+      main { flex-direction: column; }
+      section.panel:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
 </head>
 <body>
-    <div id="loading-overlay">
-        <div class="spinner"></div>
-        <p>Menghubungi Gemini AI, mohon tunggu...</p>
-    </div>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <p>Menghubungi Gemini AI, mohon tunggu...</p>
+  </div>
 
-    <header class="header">
-        <h1>AI Conversion Assistant</h1>
-        <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" class="gemini-button">
-            Buka Gemini AI
-        </a>
-    </header>
+  <header>
+    <h1>AI Conversion Assistant</h1>
+    <a href="https://gemini.google.com/" target="_blank" class="gemini-button">Buka Gemini AI</a>
+  </header>
 
-    <main class="main-container">
-        <section class="panel">
-            <div class="panel-header"><span class="panel-title">1. Input & Preview</span></div>
-            <div class="upload-area">
-                <form id="upload-form" method="post" enctype="multipart/form-data">
-                    <div class="form-controls">
-                        <input type="file" name="file_upload" accept=".pdf,.png,.jpg,.jpeg" required>
-                        <button type="submit" class="action-button">Convert with Gemini</button>
-                    </div>
-                     {% if error %}
-                        <p style="color: #dc3545; margin-top: 10px; font-size: 0.9rem;">{{ error }}</p>
-                    {% endif %}
-                </form>
-            </div>
-            <div class="panel-content">
-                {% if pdf_filename %}
-                    <iframe src="{{ url_for('uploaded_file', filename=pdf_filename) }}" title="PDF Preview"></iframe>
-                {% else %}
-                    <div class="placeholder"><p>Pratinjau file akan muncul di sini.</p></div>
-                {% endif %}
-            </div>
-        </section>
+  <main>
+    <section class="panel">
+      <div class="panel-header">1. Input & Preview</div>
+      <div class="upload-area">
+        <form id="upload-form" method="post" enctype="multipart/form-data">
+          <div class="form-controls">
+            <input type="file" name="file_upload" accept=".pdf,.png,.jpg,.jpeg" required>
+            <button type="submit" class="action-button">Convert with Gemini</button>
+          </div>
+          {% if error %}
+            <p style="color: #dc3545; margin-top: 10px; font-size: 0.9rem;">{{ error }}</p>
+          {% endif %}
+        </form>
+      </div>
+      <div class="panel-content">
+        {% if pdf_filename %}
+          <iframe src="{{ url_for('uploaded_file', filename=pdf_filename) }}" title="PDF Preview"></iframe>
+        {% else %}
+          <div class="placeholder"><p>Pratinjau file akan muncul di sini setelah diunggah.</p></div>
+        {% endif %}
+      </div>
+    </section>
 
-        <section class="panel">
-            <div class="panel-header">
-                <span class="panel-title">2. Editable HTML Snippet</span>
-                <span style="font-size: 0.8rem; color: var(--color-highlight-yellow); background-color: #3e4451; padding: 2px 6px; border-radius: 4px;">&#9888; Pure Snippet</span>
-            </div>
-            <div class="panel-content">
-                <textarea id="html-output" spellcheck="false">{% if html_snippet is not none %}{{ html_snippet }}{% else %}{% endif %}</textarea>
-            </div>
-        </section>
-    </main>
+    <section class="panel">
+      <div class="panel-header">
+        2. Editable HTML Snippet
+        <span style="font-size: 0.8rem; color: var(--warning);">⚠ Pure Snippet</span>
+      </div>
+      <div class="panel-content">
+        <textarea id="html-output" spellcheck="false">{% if html_snippet is not none %}{{ html_snippet }}{% endif %}</textarea>
+      </div>
+    </section>
+  </main>
 
-    <script>
-        document.getElementById('upload-form').addEventListener('submit', function() {
-            document.getElementById('loading-overlay').style.display = 'flex';
-        });
-    </script>
-
+  <script>
+    document.getElementById('upload-form').addEventListener('submit', function() {
+      document.getElementById('loading-overlay').style.display = 'flex';
+    });
+  </script>
 </body>
 </html>
