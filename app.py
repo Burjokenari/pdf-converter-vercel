@@ -14,7 +14,7 @@ from PIL import Image
 load_dotenv()
 app = Flask(__name__)
 
-# Konfigurasi Folder Upload
+# Folder Upload
 UPLOAD_FOLDER = '/tmp' if os.environ.get('VERCEL') else 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -31,24 +31,14 @@ try:
 except Exception as e:
     print(f"❌ Error Konfigurasi Gemini: {e}")
 
-
 # --- Prompt Utama ---
-CONVERSION_PROMPT = """
-Anda adalah asisten AI yang ahli dalam memahami dokumen visual (seperti PDF atau gambar berisi teks) 
-dan mengonversinya menjadi HTML murni dengan struktur yang rapi dan semantik.
-
-Tugas Anda:
-- Ambil konten teks yang terbaca di gambar/dokumen.
-- Pertahankan struktur dokumen (judul, paragraf, tabel, daftar, dsb).
-- Gunakan elemen HTML seperti <h1>-<h6>, <p>, <table>, <ul>/<ol>, dan <strong>/<em>.
-- Jangan sertakan elemen <html>, <head>, <body>, atau <style>.
-- Keluaran harus dalam format HTML murni yang bisa langsung disisipkan di halaman web.
+CONVERSION_PROMPT = """Anda adalah asisten AI yang mengonversi dokumen atau gambar menjadi HTML semantik yang bersih dan terstruktur.
+Gunakan elemen HTML5 seperti <section>, <article>, <header>, <footer>, <p>, <h1>–<h6>, <ul>, <ol>, <table> secara tepat.
+Jangan sertakan tag <html>, <head>, atau <body> di hasil output.
 """
 
-# --- Kelas Konversi ---
 class ConversionAssistant:
     def _call_gemini_vision(self, image: Image.Image):
-        """Panggil API Gemini dengan gambar dan instruksi konversi."""
         if not GEMINI_MODEL:
             return "<strong>Error:</strong> Gemini belum dikonfigurasi dengan benar."
 
@@ -59,24 +49,15 @@ class ConversionAssistant:
                     "temperature": 0.4,
                     "max_output_tokens": 4096,
                 },
-                safety_settings=[
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-                ]
             )
-
             result_text = getattr(response, "text", None) or ""
             clean_html = re.sub(r'```html\n|```', '', result_text).strip()
             return clean_html or "<p><strong>Error:</strong> Tidak ada output dari Gemini.</p>"
-
         except Exception as e:
             print("❌ Error Gemini:", traceback.format_exc())
             return f"<p><strong>Error saat menghubungi Gemini API:</strong> {e}</p>"
 
     def to_pure_html(self, file_path_str: str):
-        """Deteksi tipe file (PDF/gambar) lalu konversi ke HTML."""
         file_path = Path(file_path_str)
         suffix = file_path.suffix.lower()
 
@@ -99,7 +80,6 @@ class ConversionAssistant:
 
 assistant = ConversionAssistant()
 
-# --- ROUTE Flask ---
 @app.route('/', methods=['GET', 'POST'])
 def index():
     context = {}
@@ -123,7 +103,6 @@ def index():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
