@@ -4,20 +4,11 @@ import uuid
 from pathlib import Path
 import re
 
-from google import genai
+import google.generativeai as genai
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
 from flask import Flask, request, render_template, send_from_directory
 from PIL import Image
-
-client = genai.Client()
-
-response = client.models.generate_content(
-    model="gemini-2.5-flash",
-    contents="Explain how AI works in a few words",
-)
-
-print(response.text)
 
 # --- Konfigurasi Awal ---
 load_dotenv()
