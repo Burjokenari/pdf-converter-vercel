@@ -5,158 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Conversion Assistant</title>
     <style>
-        /* Palet Warna Profesional */
+        /* (CSS dari versi minimalis sebelumnya tetap sama) */
         :root {
-            --color-bg: #FFFFFF;
-            --color-panel-bg: #F8F9FA;
-            --color-primary-blue: #007BFF;
-            --color-accent-green: #28A745;
-            --color-highlight-yellow: #FFC107;
-            --color-text-dark: #343A40;
-            --color-text-light: #6c757d;
-            --color-border: #E9ECEF;
+            --color-bg: #FFFFFF; --color-panel-bg: #F8F9FA; --color-primary-blue: #007BFF;
+            --color-accent-green: #28A745; --color-highlight-yellow: #FFC107;
+            --color-text-dark: #343A40; --color-text-light: #6c757d; --color-border: #E9ECEF;
             --font-sans-serif: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
         }
+        body { font-family: var(--font-sans-serif); margin: 0; background-color: var(--color-panel-bg); color: var(--color-text-dark); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        * { box-sizing: border-box; }
+        .header { background-color: var(--color-bg); padding: 1rem 2rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .header h1 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+        .main-container { display: flex; flex-grow: 1; }
+        .panel { flex: 1; display: flex; flex-direction: column; background-color: var(--color-bg); }
+        .panel:first-child { border-right: 1px solid var(--color-border); }
+        .panel-header { padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .panel-title { font-weight: 600; font-size: 0.9rem; }
+        .panel-content { flex-grow: 1; overflow: auto; }
+        .upload-area { padding: 1rem 1.5rem; }
+        .form-controls { display: flex; gap: 1rem; align-items: center; }
+        input[type="file"] { flex-grow: 1; }
+        .action-button { padding: 0.6rem 1.2rem; background-color: var(--color-primary-blue); color: white; border: none; cursor: pointer; border-radius: 6px; font-size: 0.9rem; font-weight: 500; transition: background-color 0.2s; }
+        .action-button:hover { background-color: #0056b3; }
+        .gemini-button { padding: 0.5rem 1rem; background-color: var(--color-accent-green); color: white; text-decoration: none; border-radius: 6px; font-size: 0.9rem; transition: background-color 0.2s; }
+        .gemini-button:hover { background-color: #1e7e34; }
+        .placeholder { display: flex; justify-content: center; align-items: center; height: 100%; color: var(--color-text-light); text-align: center; }
+        iframe { width: 100%; height: 100%; border: none; }
+        textarea#html-output { width: 100%; height: 100%; border: none; resize: none; padding: 1rem; font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.5; background-color: #2E3440; color: #D8DEE9; outline: none; }
 
-        /* Reset & Global Styles */
-        * {
-            box-sizing: border-box;
-        }
-
-        body { 
-            font-family: var(--font-sans-serif);
-            margin: 0; 
-            background-color: var(--color-panel-bg);
-            color: var(--color-text-dark);
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Header */
-        .header {
-            background-color: var(--color-bg);
-            padding: 1rem 2rem;
-            border-bottom: 1px solid var(--color-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-        .header h1 {
-            margin: 0; 
-            font-size: 1.25rem; 
-            font-weight: 600;
-        }
-
-        /* Main Content & Panels */
-        .main-container {
-            display: flex;
-            flex-grow: 1;
-        }
-        .panel {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background-color: var(--color-bg);
-        }
-        .panel:first-child {
-            border-right: 1px solid var(--color-border);
-        }
-        .panel-header {
-            padding: 0.75rem 1.5rem;
-            border-bottom: 1px solid var(--color-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-        .panel-title {
-            font-weight: 600;
-            font-size: 0.9rem;
-        }
-        .panel-content {
-            flex-grow: 1;
-            overflow: auto;
-        }
-
-        /* Form & Tombol */
-        .upload-area {
-            padding: 1rem 1.5rem;
-        }
-        .upload-area label {
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-            display: block;
-        }
-        .form-controls {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-        input[type="file"] {
-            flex-grow: 1;
-        }
-        .action-button {
-            padding: 0.6rem 1.2rem;
-            background-color: var(--color-primary-blue);
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: background-color 0.2s;
-        }
-        .action-button:hover {
-            background-color: #0056b3;
-        }
-        .gemini-button {
-            padding: 0.5rem 1rem;
-            background-color: var(--color-accent-green);
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            transition: background-color 0.2s;
-        }
-        .gemini-button:hover {
-            background-color: #1e7e34;
-        }
-        
-        /* Konten Spesifik */
-        .placeholder {
-            display: flex;
+        /* --- CSS BARU UNTUK LOADING OVERLAY --- */
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: none; /* Sembunyi secara default */
             justify-content: center;
             align-items: center;
-            height: 100%;
-            color: var(--color-text-light);
-            text-align: center;
+            z-index: 1000;
+            flex-direction: column;
+            gap: 1rem;
         }
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--color-primary-blue);
+            animation: spin 1s ease infinite;
         }
-        textarea#html-output {
-            width: 100%;
-            height: 100%;
-            border: none;
-            resize: none;
-            padding: 1rem;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            line-height: 1.5;
-            background-color: #2E3440; /* Nord Polar Night */
-            color: #D8DEE9; /* Nord Snow Storm */
-            outline: none;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        
     </style>
 </head>
 <body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p>Menghubungi Gemini AI, mohon tunggu...</p>
+    </div>
+
     <header class="header">
         <h1>AI Conversion Assistant</h1>
         <a href="https://gemini.google.com/" target="_blank" rel="noopener noreferrer" class="gemini-button">
@@ -166,14 +78,12 @@
 
     <main class="main-container">
         <section class="panel">
-            <div class="panel-header">
-                <span class="panel-title">1. Input & Preview</span>
-            </div>
+            <div class="panel-header"><span class="panel-title">1. Input & Preview</span></div>
             <div class="upload-area">
-                <form method="post" enctype="multipart/form-data">
+                <form id="upload-form" method="post" enctype="multipart/form-data">
                     <div class="form-controls">
                         <input type="file" name="file_upload" accept=".pdf,.png,.jpg,.jpeg" required>
-                        <button type="submit" class="action-button">Convert</button>
+                        <button type="submit" class="action-button">Convert with Gemini</button>
                     </div>
                      {% if error %}
                         <p style="color: #dc3545; margin-top: 10px; font-size: 0.9rem;">{{ error }}</p>
@@ -184,9 +94,7 @@
                 {% if pdf_filename %}
                     <iframe src="{{ url_for('uploaded_file', filename=pdf_filename) }}" title="PDF Preview"></iframe>
                 {% else %}
-                    <div class="placeholder">
-                        <p>Pratinjau file akan muncul di sini.</p>
-                    </div>
+                    <div class="placeholder"><p>Pratinjau file akan muncul di sini.</p></div>
                 {% endif %}
             </div>
         </section>
@@ -201,6 +109,12 @@
             </div>
         </section>
     </main>
+
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', function() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+        });
+    </script>
 
 </body>
 </html>

@@ -1,103 +1,95 @@
 import os
-import re
-import uuid
 import traceback
-from collections import Counter
+import uuid
+from pathlib import Path
+import re
 
-import pdfplumber
+from google import genai
+import fitz  # PyMuPDF
+from dotenv import load_dotenv
 from flask import Flask, request, render_template, send_from_directory
 from PIL import Image
 
-try:
-    import pytesseract
-    # Jika menggunakan Windows, Anda mungkin perlu menambahkan baris ini:
-    # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-except ImportError:
-    pytesseract = None
+client = genai.Client()
 
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents="Explain how AI works in a few words",
+)
+
+print(response.text)
+
+# --- Konfigurasi Awal ---
+load_dotenv()
 app = Flask(__name__)
 
-# --- Konfigurasi Folder untuk Vercel ---
-# Semua file sementara HARUS disimpan di direktori /tmp
-UPLOAD_FOLDER = '/tmp'
+# Konfigurasi Folder
+UPLOAD_FOLDER = '/tmp' if os.environ.get('VERCEL') else 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Asisten AI untuk konversi (logika inti tidak berubah)
+# Konfigurasi API Gemini
+try:
+    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+    GEMINI_MODEL = genai.GenerativeModel('gemini-1.5-flash-latest')
+except Exception as e:
+    print(f"Error Konfigurasi Gemini: {e}")
+    GEMINI_MODEL = None
+
+# --- Prompt Paten untuk Asisten AI ---
+CONVERSION_PROMPT = """Anda adalah asisten AI untuk web content administrator yang bertugas mengonversi file .pdf atau gambar menjadi *pure HTML snippet* (tanpa DOCTYPE, <html>, <head>, atau <body>). Output hanya boleh berisi struktur HTML inti seperti <h1>, <h2>, <p>, <ul>, <ol>, <li>, <table>, dan <a>. Jangan sertakan teks tambahan, penjelasan, atau pembuka seperti 'Berikut hasil konversi'. Hanya berikan konten HTML murni.
+
+Instruksi konversi:
+1. Gunakan <h1> untuk judul utama, <h2> untuk subjudul, <h3> untuk sub-subjudul.
+2. Gunakan <table> standar dengan border="1" tanpa CSS.
+3. Gunakan <p> untuk paragraf, <strong> untuk bold.
+4. Untuk list, gunakan <ul><li> atau <ol><li> sesuai konteks.
+5. Jangan tulis <html> atau <body>, cukup isi konten HTML-nya saja.
+
+Instruksi konversi khusus untuk SOP:
+1. Judul SOP menggunakan <h2>.
+2. Subjudul seperti 'Standard Operating Procedure' menggunakan <h3>.
+3. Jika terdapat tabel, gunakan <table> dengan border="1", tanpa style CSS. Isi tabel jika kosong dengan strip (-).
+4. List yang ditemukan dalam tabel harus menggunakan <ol> untuk urutan numerik dan <ul> untuk bullet list, walaupun hanya memiliki satu item.
+5. Untuk FAQ, setiap pertanyaan setelah <h2> harus diikuti <br> (bukan <p>). Berikan penegasan seperti "Berikut ini adalah (copy judulnya)" setelah setiap pertanyaan.
+6. Setiap kali ada teks tebal, gunakan <strong></strong>, namun jika terdapat teks italic, jangan menggunakan tag apapun.
+7. Ketika terdapat aritmatika (misalnya 10+5/2), tulis dalam format teks (misalnya sepuluh ditambah lima dibagi dua).
+8. Jangan mengubah urutan elemen atau isi teks dari dokumen asli kecuali untuk memperbaiki kesalahan penulisan."""
+
 class ConversionAssistant:
-    def to_pure_html(self, file_path):
-        if file_path.lower().endswith('.pdf'):
-            return self._convert_pdf(file_path)
-        elif file_path.lower().endswith(('.png', '.jpg', '.jpeg')):
-            return self._convert_image(file_path)
+    def _call_gemini_vision(self, image: Image.Image):
+        """Fungsi inti untuk memanggil API Gemini menggunakan pola GenerativeModel."""
+        if not GEMINI_MODEL:
+            return "<strong>Error:</strong> API Key Gemini tidak terkonfigurasi."
+        
+        try:
+            # --- PERUBAHAN UTAMA: Kembali ke pola GenerativeModel yang benar ---
+            response = GEMINI_MODEL.generate_content([CONVERSION_PROMPT, image])
+            # ------------------------------------------------------------------
+            
+            clean_response = re.sub(r'```html\n|```', '', response.text)
+            return clean_response
+        except Exception as e:
+            return f"<strong>Error saat menghubungi Gemini API:</strong> {e}"
+
+    def to_pure_html(self, file_path_str: str):
+        file_path = Path(file_path_str)
+        
+        if file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.bmp']:
+            img = Image.open(file_path)
+            return self._call_gemini_vision(img)
+
+        elif file_path.suffix.lower() == '.pdf':
+            doc = fitz.open(file_path)
+            full_html = ""
+            for i, page in enumerate(doc):
+                pix = page.get_pixmap(dpi=96)
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                html_snippet = self._call_gemini_vision(img)
+                full_html += f"\n{html_snippet}\n\n"
+            doc.close()
+            return full_html.strip()
+            
         return "<p><strong>Error:</strong> Format file tidak didukung.</p>"
-
-    def _convert_image(self, file_path):
-        if not pytesseract:
-            return "<p><strong>Error:</strong> Pytesseract tidak terinstal.</p>"
-        try:
-            text = pytesseract.image_to_string(Image.open(file_path), lang='ind')
-            return self._structure_text_to_html(text)
-        except Exception as e:
-            return f"<p><strong>Error OCR:</strong> {e}</p>"
-
-    def _structure_text_to_html(self, text):
-        html_output = ""
-        lines = text.split('\n')
-        is_in_list = None
-        is_faq = False
-        faq_title = ""
-
-        for line in lines:
-            stripped_line = line.strip()
-            if not stripped_line:
-                continue
-            
-            if is_in_list and not re.match(r'^((\d+\.)|([a-z]\))|[-•*])\s', stripped_line):
-                html_output += f"</{is_in_list}>\n"
-                is_in_list = None
-            
-            if stripped_line.isupper() and len(stripped_line.split()) < 6:
-                html_output += f"<h1>{stripped_line}</h1>\n"
-                if "FAQ" in stripped_line.upper():
-                    is_faq, faq_title = True, stripped_line
-            elif stripped_line.istitle() and len(stripped_line.split()) < 8:
-                html_output += f"<h2>{stripped_line}</h2>\n"
-                if "Standard Operating Procedure" in stripped_line:
-                    html_output += f"<h3>{stripped_line}</h3>\n"
-            elif re.match(r'^\d+\.\s', stripped_line):
-                if is_in_list != 'ol':
-                    if is_in_list: html_output += f"</{is_in_list}>\n"
-                    html_output += "<ol>\n"
-                    is_in_list = 'ol'
-                html_output += f"  <li>{re.sub(r'^\d+\.\s', '', stripped_line)}</li>\n"
-            elif re.match(r'^([a-z]\))|[-•*]\s', stripped_line):
-                if is_in_list != 'ul':
-                    if is_in_list: html_output += f"</{is_in_list}>\n"
-                    html_output += "<ul>\n"
-                    is_in_list = 'ul'
-                html_output += f"  <li>{re.sub(r'^([a-z]\))|[-•*]\s', '', stripped_line)}</li>\n"
-            elif is_faq and stripped_line.endswith('?'):
-                 html_output += f"{stripped_line}<br>\n<strong>Berikut ini adalah {faq_title}</strong>\n"
-            else:
-                html_output += f"<p>{stripped_line}</p>\n"
-        
-        if is_in_list:
-            html_output += f"</{is_in_list}>\n"
-            
-        return html_output
-
-    def _convert_pdf(self, file_path):
-        html_output = ""
-        try:
-            with pdfplumber.open(file_path) as pdf:
-                full_text = ""
-                for page in pdf.pages:
-                    full_text += page.extract_text(layout=True) or ""
-                html_output = self._structure_text_to_html(full_text)
-        except Exception as e:
-            return f"<p><strong>Error PDF:</strong> {e}</p>"
-        
-        return html_output.strip()
 
 assistant = ConversionAssistant()
 
@@ -110,27 +102,21 @@ def index():
             context['error'] = "Silakan pilih file terlebih dahulu."
             return render_template('index.html', **context)
 
-        # Simpan file dengan nama unik agar tidak tertimpa
-        filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1].lower()
+        filename = str(uuid.uuid4()) + Path(file.filename).suffix.lower()
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
         
-        # Lakukan konversi
         html_snippet = assistant.to_pure_html(filepath)
         
-        # Kirim nama file dan hasil snippet ke template
         context['html_snippet'] = html_snippet
-        # Hanya kirim nama file jika itu adalah PDF
         if filename.endswith('.pdf'):
             context['pdf_filename'] = filename
 
     return render_template('index.html', **context)
 
-# Route baru untuk menyajikan file yang diunggah
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
